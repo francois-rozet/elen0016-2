@@ -1,0 +1,22 @@
+##########
+# System #
+##########
+
+# macOS file
+.DS_Store
+
+
+####################
+# Python & Jupyter #
+####################
+
+__pycache__/
+.ipynb_checkpoints/
+
+
+##########
+# Others #
+##########
+
+**/resources/
+**/products/
