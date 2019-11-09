@@ -14,9 +14,23 @@ __pycache__/
 .ipynb_checkpoints/
 
 
+#########
+# LaTeX #
+#########
+
+*.synctex.gz
+
+
 ##########
 # Others #
 ##########
 
-**/resources/
-**/products/
+resources/
+products/
+
+
+##############
+# Exceptions #
+##############
+
+!**/latex/resources/
