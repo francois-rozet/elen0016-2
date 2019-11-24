@@ -71,15 +71,13 @@ def preprocessing(img):
 
     return img
 
-def grid_threshold(img):
+def threshold(img, n_block, c):
     # Parameters
-    shape = np.array(img.shape)
+    shape = np.flip(np.array(img.shape), 0)
 
-    block_size = shape.mean().astype(int) // (9 * 9)
+    block_size = shape.mean().astype(int) // n_block
     block_size += block_size % 2 + 1
     block_size = block_size if block_size > 1 else 3
-
-    c = 20
 
     # Threshold
     img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block_size, c)
@@ -105,33 +103,18 @@ def grid_detection(img):
 
     return grid
 
-def cell_threshold(img):
-    # Parameters
-    shape = np.array(img.shape)
-
-    block_size = shape.mean().astype(int) // (3 * 9)
-    block_size += block_size % 2 + 1
-    block_size = block_size if block_size > 1 else 3
-
-    c = 5
-
-    # Adaptive threshold
-    img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block_size, c)
-
-    # Outer rectangle
-    cv2.rectangle(img, (0, 0), tuple(shape), 255, thickness=2)
-
-    return img
-
 def cell_detection(img):
     # Parameters
-    shape = np.array(img.shape)
+    shape = np.flip(np.array(img.shape), 0)
 
     area_thresh = 2
-    ratio_thresh = 1 / 5
+    ratio_thresh = 1 / 4
 
     kernel = np.ones((3, 3))
     iterations = 5
+
+    thickness = 2
+    margin = 4
 
     # Find contours
     ctns, _ = cv2.findContours(img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -143,11 +126,14 @@ def cell_detection(img):
     for ctn in ctns:
         peri = cv2.arcLength(ctn, True)
         area = cv2.contourArea(ctn)
-        if (area < cell_shape.mean() or area > peri / 2) and area < cell_area / area_thresh:
+        if area < cell_shape.mean() or (area > peri / 2 and area < cell_area / area_thresh):
             cv2.drawContours(img, [ctn], 0, 0, -1)
 
     # Dilate
     img = cv2.dilate(img, kernel, iterations=iterations)
+
+    # Outer rectangle
+    cv2.rectangle(img, (0, 0), tuple(shape - 1), 255, thickness=thickness)
 
     # Cells search
     ctns, _ = cv2.findContours(img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -156,24 +142,112 @@ def cell_detection(img):
 
     for ctn in ctns:
         (x, y), (w, h), angle = cv2.minAreaRect(ctn)
-        w, h = w + 4, h + 4
-        if abs(1 - w / h) < ratio_thresh and  w * h < cell_area * area_thresh and w * h > cell_area / area_thresh ** 2:
+        w, h = w + margin, h + margin
+        if abs(1 - w / h) < ratio_thresh and  w * h < cell_area * area_thresh and w * h > cell_area / area_thresh:
             rect = (x, y), (w, h), angle
             cells.append(rect)
 
     return cells
 
+def cell_filter(cells):
+    # Parameters
+    n = 9
+
+    # Condition
+    if len(cells) < 2 / 3 * n ** 2:
+        return []
+
+    # Numpy arrays
+    pos = np.array([[x, y] for (x, y), _, _ in cells])
+    shape = np.array([[w, h] for _, (w, h), _ in cells])
+    area = shape.prod(axis=1)
+
+    size = shape.mean()
+
+    # Outliers
+    outlier = np.full(pos.shape[0], False)
+
+    for i in range(pos.shape[0]):
+        dist = np.abs(pos - pos[i]).sum(axis=1)
+        j = np.argpartition(dist, 1)[1]
+
+        if dist[j] < size / 2:
+            k = i if area[i] < area[j] else j
+
+            outlier[k] = True
+
+    good = np.logical_not(outlier)
+
+    cells = [cells[i] for i, j in enumerate(good) if j]
+    pos = pos[good]
+    shape = shape[good].mean(axis=0)
+
+    # Size
+    dist = np.empty(pos.shape[0])
+    for i in range(pos.shape[0]):
+        dist[i] = np.partition(np.abs(pos - pos[i]).sum(axis=1), 1)[1]
+
+    z_score = (dist - dist.mean()) / dist.std()
+    size = dist[z_score < 1.96].mean()
+
+    # Grid
+    grid = np.full((n, n), None, dtype=object)
+    x, y = 0, 0
+
+    while True:
+        if x > 0 and y > 0:
+            expected = np.array(grid[x - 1, y][0]) + np.array(grid[x, y - 1][0]) + np.array(grid[x - 1, y - 1][0]) + 2 * np.array([size, size])
+            expected /= 3
+        elif x > 0:
+            expected = np.array(grid[x - 1, y][0]) + np.array([size, 0])
+        elif y > 0:
+            expected = np.array(grid[x, y - 1][0]) + np.array([0, size])
+        else:
+            expected = np.amin(pos, axis=0)
+
+        dist = np.abs(pos - expected).sum(axis = 1)
+        i = np.argmin(dist)
+
+        if dist[i] < size / 2:
+            grid[x, y] = cells[i]
+        else:
+            grid[x, y] = tuple(expected), tuple(shape), 0
+
+        if x < n - 1:
+            if y > 0:
+                x, y = x + 1, y - 1
+            else:
+                x, y = y, x + 1
+        else:
+            if y < n - 1:
+                x, y = y + 1, x
+            else:
+                break
+
+    cells = grid.ravel().tolist()
+
+    return cells
+
 def draw(img, cells):
     # Parameters
-    color = (0, 0, 255)
+    red = (0, 0, 255)
+    green = (0, 255, 0)
     thickness = 1
 
     # RBG
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-    # Draw contours
-    cells = [vertices(i).astype(int) for i in cells]
-    cv2.drawContours(img, cells, -1, color, thickness)
+    # Draw
+    temp = cell_filter(cells)
+
+    if len(temp) == 0:
+        color = red
+    else:
+        cells = temp
+        color = green
+
+    ctns = [vertices(i).astype(int) for i in cells]
+    cv2.drawContours(img, ctns, -1, color, thickness)
 
     return img
 
@@ -186,24 +260,22 @@ def procedure(img_path):
     img = preprocessing(img)
     yield img
 
-    # Grid threshold
-    thresh = grid_threshold(img)
+    # Grid detection
+    thresh = threshold(img, 9 * 9, 15)
     yield thresh
 
-    # Grid detection
     grid = grid_detection(thresh)
-    if not grid is None:
-        img = warp(img, grid, contour=True)
+    if grid is None:
+        return None
+
+    img = warp(img, grid, contour=True)
     yield img
 
-    # Thresholding
-    thresh = cell_threshold(img)
+    # Cell detection
+    thresh = threshold(img, 3 * 9, 10)
     yield thresh
 
-    # Cell detection
     cells = cell_detection(thresh)
-    if len(cells) != 81:
-        print(len(cells))
     img = draw(img, cells)
     yield img
 
@@ -214,18 +286,19 @@ def fast(img_path):
     # Preprocessing
     img = preprocessing(img)
 
-    # Grid threshold
-    thresh = grid_threshold(img)
-
     # Grid detection
+    thresh = threshold(img, 9 * 9, 15)
     grid = grid_detection(thresh)
-    if not grid is None:
-        img = warp(img, grid, contour=True)
+    if grid is None:
+        return None
 
-    # Cell threshold
-    thresh = cell_threshold(img)
+    img = warp(img, grid, contour=True)
 
     # Cell detection
+    thresh = threshold(img, 3 * 9, 10)
     cells = cell_detection(thresh)
+
+    # Filter cells
+    cells = cell_filter(cells)
 
     return img, cells
