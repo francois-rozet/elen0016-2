@@ -31,13 +31,26 @@ def vertices(rect):
 
     return rect
 
-def warp(img, rect):
-    # Dimensions
-    w, h = rect[1]
-    size = int(np.sqrt(w * h))
+def warp(img, ctn, contour=False):
+    if contour:
+        tl = np.argmin(ctn[:,0,0] + ctn[:,0,1])
+        tr = np.argmin(ctn[:,0,0] - ctn[:,0,1])
+        br = np.argmin(-ctn[:,0,0] - ctn[:,0,1])
+        bl = np.argmin(-ctn[:,0,0] + ctn[:,0,1])
+
+        ctn = ctn[[tl, bl, br, tr]]
+
+        area = cv2.contourArea(ctn)
+        src = ctn[:,0,:].astype('f')
+    else:
+        w, h = ctn[1]
+
+        area = w * h
+        src = vertices(ctn).astype('f')
+
+    size = int(np.sqrt(area))
 
     # Perspective Transform
-    src = vertices(rect).astype('f')
     dst = np.array([
         [0, 0],
         [size - 1, 0],
@@ -87,7 +100,7 @@ def grid_detection(img):
     for ctn in ctns:
         _, (w, h), _ = rect = cv2.minAreaRect(ctn)
         if area < w * h and abs(1 - w / h) < ratio_thresh:
-            grid = rect
+            grid = ctn
             area = w * h
 
     return grid
@@ -105,6 +118,9 @@ def cell_threshold(img):
     # Adaptive threshold
     img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block_size, c)
 
+    # Outer rectangle
+    cv2.rectangle(img, (0, 0), tuple(shape), 255, thickness=2)
+
     return img
 
 def cell_detection(img):
@@ -112,6 +128,7 @@ def cell_detection(img):
     shape = np.array(img.shape)
 
     area_thresh = 2
+    ratio_thresh = 1 / 5
 
     kernel = np.ones((3, 3))
     iterations = 5
@@ -138,8 +155,10 @@ def cell_detection(img):
     cells = []
 
     for ctn in ctns:
-        _, (w, h), _ = rect = cv2.minAreaRect(ctn)
-        if w * h < cell_area * area_thresh and w * h > cell_area / area_thresh ** 2:
+        (x, y), (w, h), angle = cv2.minAreaRect(ctn)
+        w, h = w + 4, h + 4
+        if abs(1 - w / h) < ratio_thresh and  w * h < cell_area * area_thresh and w * h > cell_area / area_thresh ** 2:
+            rect = (x, y), (w, h), angle
             cells.append(rect)
 
     return cells
@@ -174,7 +193,7 @@ def procedure(img_path):
     # Grid detection
     grid = grid_detection(thresh)
     if not grid is None:
-        img = warp(img, grid)
+        img = warp(img, grid, contour=True)
     yield img
 
     # Thresholding
@@ -201,11 +220,12 @@ def fast(img_path):
     # Grid detection
     grid = grid_detection(thresh)
     if not grid is None:
-        img = warp(img, grid)
+        img = warp(img, grid, contour=True)
 
     # Cell threshold
     thresh = cell_threshold(img)
 
     # Cell detection
     cells = cell_detection(thresh)
+
     return img, cells
