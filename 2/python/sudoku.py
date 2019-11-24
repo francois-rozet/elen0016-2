@@ -58,26 +58,31 @@ def preprocessing(img):
 
     return img
 
-def perspective_correction(img):
+def grid_threshold(img):
     # Parameters
-    lb, ub = 90, 255
-    kernel = np.ones((3, 3))
-    iterations = 3
+    shape = np.array(img.shape)
 
-    ratio_thresh = 1 / 6
+    block_size = shape.mean().astype(int) // (9 * 9)
+    block_size += block_size % 2 + 1
+    block_size = block_size if block_size > 1 else 3
+
+    c = 20
 
     # Threshold
-    _, thresh = cv2.threshold(img, lb, ub, cv2.THRESH_BINARY_INV)
+    img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block_size, c)
 
-    # Dilate
-    thresh = cv2.dilate(thresh, kernel, iterations=iterations)
+    return img
+
+def grid_detection(img):
+    # Parameters
+    ratio_thresh = 1 / 5
 
     # Find contours
-    ctns, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    ctns, _ = cv2.findContours(img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
     # Grid search
     grid = None
-    area = 0
+    area = np.array(img.shape).prod() / 4
 
     for ctn in ctns:
         _, (w, h), _ = rect = cv2.minAreaRect(ctn)
@@ -85,12 +90,9 @@ def perspective_correction(img):
             grid = rect
             area = w * h
 
-    if not grid is None:
-        img = warp(img, grid)
+    return grid
 
-    return img
-
-def thresholding(img):
+def cell_threshold(img):
     # Parameters
     shape = np.array(img.shape)
 
@@ -98,14 +100,10 @@ def thresholding(img):
     block_size += block_size % 2 + 1
     block_size = block_size if block_size > 1 else 3
 
-    c = 10
-
-    kernel = np.ones((3, 3))
-    iterations = 1
+    c = 5
 
     # Adaptive threshold
     img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block_size, c)
-    img = cv2.dilate(img, kernel, iterations=iterations)
 
     return img
 
@@ -116,7 +114,7 @@ def cell_detection(img):
     area_thresh = 2
 
     kernel = np.ones((3, 3))
-    iterations = 3
+    iterations = 5
 
     # Find contours
     ctns, _ = cv2.findContours(img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -126,8 +124,9 @@ def cell_detection(img):
     cell_area = cell_shape.prod()
 
     for ctn in ctns:
+        peri = cv2.arcLength(ctn, True)
         area = cv2.contourArea(ctn)
-        if area < cell_area * area_thresh:
+        if (area < cell_shape.mean() or area > peri / 2) and area < cell_area / area_thresh:
             cv2.drawContours(img, [ctn], 0, 0, -1)
 
     # Dilate
@@ -168,12 +167,18 @@ def procedure(img_path):
     img = preprocessing(img)
     yield img
 
-    # Perspective correction
-    img = perspective_correction(img)
+    # Grid threshold
+    thresh = grid_threshold(img)
+    yield thresh
+
+    # Grid detection
+    grid = grid_detection(thresh)
+    if not grid is None:
+        img = warp(img, grid)
     yield img
 
     # Thresholding
-    thresh = thresholding(img)
+    thresh = cell_threshold(img)
     yield thresh
 
     # Cell detection
@@ -182,3 +187,25 @@ def procedure(img_path):
         print(len(cells))
     img = draw(img, cells)
     yield img
+
+def fast(img_path):
+    # Read the image
+    img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+
+    # Preprocessing
+    img = preprocessing(img)
+
+    # Grid threshold
+    thresh = grid_threshold(img)
+
+    # Grid detection
+    grid = grid_detection(thresh)
+    if not grid is None:
+        img = warp(img, grid)
+
+    # Cell threshold
+    thresh = cell_threshold(img)
+
+    # Cell detection
+    cells = cell_detection(thresh)
+    return img, cells

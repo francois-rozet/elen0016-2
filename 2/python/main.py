@@ -23,10 +23,10 @@ import sudoku as process
 ##############
 
 # Path to an image, a video or a directory of images to process
-ORIGIN = '../../1/resources/images/sudoku/'
+ORIGIN = '../resources/images/sudoku/'
 
 # Path to export processed images
-DESTINATION = '../products/sudoku/'
+DESTINATION = '../products/images/sudoku/'
 
 
 ###############
