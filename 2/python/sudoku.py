@@ -32,6 +32,7 @@ def vertices(rect):
     return rect
 
 def warp(img, ctn, contour=False):
+    # Source and destination
     if contour:
         tl = np.argmin(ctn[:,0,0] + ctn[:,0,1])
         tr = np.argmin(ctn[:,0,0] - ctn[:,0,1])
@@ -50,7 +51,6 @@ def warp(img, ctn, contour=False):
 
     size = int(np.sqrt(area))
 
-    # Perspective Transform
     dst = np.array([
         [0, 0],
         [size - 1, 0],
@@ -58,6 +58,7 @@ def warp(img, ctn, contour=False):
         [0, size - 1]
     ]).astype('f')
 
+    # Perspective Transform
     matrix = cv2.getPerspectiveTransform(src, dst)
 
     # Warp
@@ -228,30 +229,45 @@ def cell_filter(cells):
 
     return cells
 
+def digit_recognition(img, cells, model):
+    digits = np.zeros(len(cells), dtype=int)
+
+    for i, cell in enumerate(cells):
+        digits[i] = model(warp(img, cell))
+
+    return digits
+
 def draw(img, cells):
     # Parameters
-    red = (0, 0, 255)
-    green = (0, 255, 0)
+    color = (0, 0, 255)
     thickness = 1
 
     # RBG
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
     # Draw
-    temp = cell_filter(cells)
-
-    if len(temp) == 0:
-        color = red
-    else:
-        cells = temp
-        color = green
-
     ctns = [vertices(i).astype(int) for i in cells]
     cv2.drawContours(img, ctns, -1, color, thickness)
 
     return img
 
-def procedure(img_path):
+def overlay(img, cells, digits):
+    # Parameters
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.66
+    color = (0, 0, 255)
+
+    # RGB
+    img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+    # Text
+    for i, cell in enumerate(cells):
+        if digits[i] != 0:
+            cv2.putText(img, str(digits[i]), cell[0], font, scale, color)
+
+    return img
+
+def procedure(img_path, model=None):
     # Read the image
     img = cv2.imread(img_path, cv2.IMREAD_COLOR)
     yield img
@@ -276,29 +292,46 @@ def procedure(img_path):
     yield thresh
 
     cells = cell_detection(thresh)
-    img = draw(img, cells)
-    yield img
+    yield draw(img, cells)
 
-def fast(img_path):
-    # Read the image
-    img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-
-    # Preprocessing
-    img = preprocessing(img)
-
-    # Grid detection
-    thresh = threshold(img, 9 * 9, 15)
-    grid = grid_detection(thresh)
-    if grid is None:
-        return None
-
-    img = warp(img, grid, contour=True)
-
-    # Cell detection
-    thresh = threshold(img, 3 * 9, 10)
-    cells = cell_detection(thresh)
-
-    # Filter cells
+    # Cell filter
     cells = cell_filter(cells)
+    if len(cells) == 0:
+        return None
 
-    return img, cells
+    yield draw(img, cells)
+
+    # Digit recognition
+    if model is None:
+        return None
+
+    digits = digit_recognition(img, cells, model)
+    yield overlay(img, cells, digits)
+
+def fast(img_path, model):
+    # Read the image
+    img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+
+    # Preprocessing
+    img = preprocessing(img)
+
+    # Grid detection
+    thresh = threshold(img, 9 * 9, 15)
+    grid = grid_detection(thresh)
+    if grid is None:
+        return None
+
+    img = warp(img, grid, contour=True)
+
+    # Cell detection
+    thresh = threshold(img, 3 * 9, 10)
+    cells = cell_detection(thresh)
+
+    # Cell filter
+    cells = cell_filter(cells)
+    if len(cells) == 0:
+        return None
+
+    # Digit recognition
+    digits = digit_recognition(img, cells, model)
+    return digits.reshape((9, 9)).transpose()
