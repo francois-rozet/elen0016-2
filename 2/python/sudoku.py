@@ -20,6 +20,7 @@ import cv2
 ###########
 
 def vertices(rect):
+    '''Transforms a rotated rectangle into vertices.'''
     # Array
     rect = np.array(cv2.boxPoints(rect))
 
@@ -31,7 +32,10 @@ def vertices(rect):
 
     return rect
 
+
 def warp(img, ctn, contour=False):
+    '''Corrects perspective according to a rectangle/contour.'''
+
     # Source and destination
     if contour:
         tl = np.argmin(ctn[:,0,0] + ctn[:,0,1])
@@ -66,13 +70,19 @@ def warp(img, ctn, contour=False):
 
     return img
 
+
 def preprocessing(img):
+    '''Preprocesses an image.'''
+
     # Gray scale
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     return img
 
+
 def threshold(img, n_block, c):
+    '''Performs an adaptive threshold on an image.'''
+
     # Parameters
     shape = np.flip(np.array(img.shape), 0)
 
@@ -85,7 +95,10 @@ def threshold(img, n_block, c):
 
     return img
 
+
 def grid_detection(img):
+    '''Detects the grid within a thresholded image.'''
+
     # Parameters
     ratio_thresh = 1 / 5
 
@@ -104,7 +117,10 @@ def grid_detection(img):
 
     return grid
 
+
 def cell_detection(img):
+    '''Detects cells within a thresholded image.'''
+
     # Parameters
     shape = np.flip(np.array(img.shape), 0)
 
@@ -128,29 +144,36 @@ def cell_detection(img):
         peri = cv2.arcLength(ctn, True)
         area = cv2.contourArea(ctn)
         if area < cell_shape.mean() or (area > peri / 2 and area < cell_area / area_thresh):
+            # Remove inadequate contours
             cv2.drawContours(img, [ctn], 0, 0, -1)
 
     # Dilate
     img = cv2.dilate(img, kernel, iterations=iterations)
 
-    # Outer rectangle
+    # Draw outer rectangle
     cv2.rectangle(img, (0, 0), tuple(shape - 1), 255, thickness=thickness)
 
-    # Cells search
+    # Find contours
     ctns, _ = cv2.findContours(img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
+    # Cells list
     cells = []
 
+    # Contours filtering
     for ctn in ctns:
         (x, y), (w, h), angle = cv2.minAreaRect(ctn)
         w, h = w + margin, h + margin
         if abs(1 - w / h) < ratio_thresh and  w * h < cell_area * area_thresh and w * h > cell_area / area_thresh:
+            # Add to cells list
             rect = (x, y), (w, h), angle
             cells.append(rect)
 
     return cells
 
+
 def cell_filter(cells):
+    '''Orders cells and guesses location of missing cells.'''
+
     # Parameters
     n = 9
 
@@ -170,20 +193,21 @@ def cell_filter(cells):
 
     for i in range(pos.shape[0]):
         dist = np.abs(pos - pos[i]).sum(axis=1)
+        # Nearest cell from cell i
         j = np.argpartition(dist, 1)[1]
 
         if dist[j] < size / 2:
-            k = i if area[i] < area[j] else j
-
-            outlier[k] = True
+            # Remove smallest between i and j
+            outlier[i if area[i] < area[j] else j] = True
 
     good = np.logical_not(outlier)
 
-    cells = [cells[i] for i, j in enumerate(good) if j]
+    # Keep non outliers
+    cells = [cell for i, cell in enumerate(cells) if good[i]]
     pos = pos[good]
     shape = shape[good].mean(axis=0)
 
-    # Size
+    # Size as mean distance between cells
     dist = np.empty(pos.shape[0])
     for i in range(pos.shape[0]):
         dist[i] = np.partition(np.abs(pos - pos[i]).sum(axis=1), 1)[1]
@@ -191,11 +215,12 @@ def cell_filter(cells):
     z_score = (dist - dist.mean()) / dist.std()
     size = dist[z_score < 1.96].mean()
 
-    # Grid
+    # Grid building
     grid = np.full((n, n), None, dtype=object)
     x, y = 0, 0
 
     while True:
+        # Expected postion from neighbors
         if x > 0 and y > 0:
             expected = np.array(grid[x - 1, y][0]) + np.array(grid[x, y - 1][0]) + np.array(grid[x - 1, y - 1][0]) + 2 * np.array([size, size])
             expected /= 3
@@ -209,11 +234,14 @@ def cell_filter(cells):
         dist = np.abs(pos - expected).sum(axis = 1)
         i = np.argmin(dist)
 
+        # If cell[i] is close enough to grid[x, y]
         if dist[i] < size / 2:
             grid[x, y] = cells[i]
         else:
+            # Create new cell
             grid[x, y] = tuple(expected), tuple(shape), 0
 
+        # Next cell
         if x < n - 1:
             if y > 0:
                 x, y = x + 1, y - 1
@@ -229,7 +257,10 @@ def cell_filter(cells):
 
     return cells
 
+
 def digit_recognition(img, cells, model):
+    '''Uses model to recognize digits within cells.'''
+
     digits = np.zeros(len(cells), dtype=int)
 
     for i, cell in enumerate(cells):
@@ -237,7 +268,10 @@ def digit_recognition(img, cells, model):
 
     return digits
 
+
 def draw(img, cells):
+    '''Draws cells over an image.'''
+
     # Parameters
     color = (0, 0, 255)
     thickness = 1
@@ -251,7 +285,10 @@ def draw(img, cells):
 
     return img
 
+
 def overlay(img, cells, digits):
+    '''Draws digits over an image.'''
+
     # Parameters
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale = 0.66
@@ -267,7 +304,10 @@ def overlay(img, cells, digits):
 
     return img
 
+
 def procedure(img_path, model=None):
+    '''Executes the digit recognition procedure. Returns images.'''
+
     # Read the image
     img = cv2.imread(img_path, cv2.IMREAD_COLOR)
     yield img
@@ -308,7 +348,10 @@ def procedure(img_path, model=None):
     digits = digit_recognition(img, cells, model)
     yield overlay(img, cells, digits)
 
+
 def fast(img_path, model):
+    '''Executes the digit recognition procedure. Returns digit matrix.'''
+
     # Read the image
     img = cv2.imread(img_path, cv2.IMREAD_COLOR)
 
