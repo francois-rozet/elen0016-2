@@ -291,8 +291,10 @@ def overlay(img, cells, digits):
 
     # Parameters
     font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = 0.66
+    scale = 1.5
+    offset = int(scale * 10)
     color = (0, 0, 255)
+    thickness = 2
 
     # RGB
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
@@ -300,7 +302,8 @@ def overlay(img, cells, digits):
     # Text
     for i, cell in enumerate(cells):
         if digits[i] != 0:
-            cv2.putText(img, str(digits[i]), cell[0], font, scale, color)
+            org = (int(cell[0][0]) - offset, int(cell[0][1]) + offset)
+            cv2.putText(img, str(digits[i]), org, font, scale, color, thickness)
 
     return img
 
