@@ -270,6 +270,33 @@ class Gkoehler(DigitClassifier):
         return img
 
 
+class Resnet164(DigitClassifier):
+    '''Resnet164 digit classifier. Source : https://github.com/Curt-Park/handwritten_digit_recognition'''
+    def __init__(self, warm_start):
+        super().__init__(warm_start)
+
+    def preprocessing(self, img):
+        '''Preprocesses image.'''
+        img = threshold(img, n_block=2, c=20)
+        img = cv2.resize(img, (28, 28))
+        cv2.rectangle(img, (-1, -1), img.shape, 0, thickness=2)
+        img = cv2.normalize(
+            img,
+            None,
+            alpha=0,
+            beta=1,
+            norm_type=cv2.NORM_MINMAX,
+            dtype=cv2.CV_32F
+        )
+        img = img.reshape(1, 28, 28, 1)
+
+        return img
+
+    def predict_proba(self, img):
+        '''Predicts classes probabilities.'''
+        return self.model.predict(self.preprocessing(img))
+
+
 ##############
 # Parameters #
 ##############
