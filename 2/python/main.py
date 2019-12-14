@@ -17,6 +17,7 @@ import numpy as np
 import utils
 
 import sudoku as process
+import models
 
 
 ##############
@@ -30,7 +31,7 @@ ORIGIN = '../resources/images/sudoku/'
 DESTINATION = '../products/images/sudoku/'
 
 # Model
-MODEL = None
+MODEL = models.Ghouzam('../products/models/ghouzam.h5').predict
 
 # Write step images
 SAVE_STEPS = True
