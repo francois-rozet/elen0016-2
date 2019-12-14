@@ -13,6 +13,7 @@ Sudoku digit recognition and performance assessment
 
 import os
 import cv2
+import numpy as np
 import utils
 
 import sudoku as process
@@ -22,16 +23,22 @@ import sudoku as process
 # Parameters #
 ##############
 
-# Path to an image, a video or a directory of images to process
+# Path to an image or a directory of images to process
 ORIGIN = '../resources/images/sudoku/'
 
-# Path to export processed images
+# Path to export processed files
 DESTINATION = '../products/images/sudoku/'
 
+# Model
+MODEL = None
 
-###############
-# Main Script #
-###############
+# Write step images
+SAVE_STEPS = True
+
+
+########
+# Main #
+########
 
 if __name__ == '__main__':
     try:
@@ -43,15 +50,24 @@ if __name__ == '__main__':
         # mkdir -p DESTINATION
         os.makedirs(DESTINATION, exist_ok=True)
 
-        # Execute the detection procedure for each image
+        # Execute the procedure for each image
         for img_path in img_list:
             # Split the image name and extension
             img_name, img_ext = os.path.splitext(os.path.basename(img_path))
             img_dst = DESTINATION + img_name + '_{:02d}' + img_ext
 
-            # Write the processed images
-            for i, img in enumerate(process.procedure(img_path)):
-                cv2.imwrite(img_dst.format(i), img)
+            try:
+                if SAVE_STEPS:
+                    # Write the processed images
+                    for i, img in enumerate(process.procedure(img_path, MODEL)):
+                        cv2.imwrite(img_dst.format(i), img)
+
+                if MODEL is not None:
+                    # Write the processed digits
+                    grid = process.fast(img_path, MODEL)
+                    np.savetxt(DESTINATION + img_name + '.dat', grid, fmt='%d')
+            except Exception as e:
+                print(e)
 
             print(img_name + img_ext + ' processed')
 

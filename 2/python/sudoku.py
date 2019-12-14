@@ -325,7 +325,7 @@ def procedure(img_path, model=None):
 
     grid = grid_detection(thresh)
     if grid is None:
-        return None
+        raise Exception('cannot find grid')
 
     img = warp(img, grid, contour=True)
     yield img
@@ -340,7 +340,7 @@ def procedure(img_path, model=None):
     # Cell filter
     cells = cell_filter(cells)
     if len(cells) == 0:
-        return None
+        raise Exception('not enough cells')
 
     yield draw(img, cells)
 
@@ -365,7 +365,7 @@ def fast(img_path, model):
     thresh = threshold(img, 9 * 9, 15)
     grid = grid_detection(thresh)
     if grid is None:
-        return None
+        raise Exception('cannot find grid')
 
     img = warp(img, grid, contour=True)
 
@@ -376,7 +376,7 @@ def fast(img_path, model):
     # Cell filter
     cells = cell_filter(cells)
     if len(cells) == 0:
-        return None
+        raise Exception('not enough cells')
 
     # Digit recognition
     digits = digit_recognition(img, cells, model)
