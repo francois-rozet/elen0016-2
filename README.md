@@ -12,3 +12,7 @@ Project realized as part of the course *Computer vision* given by **Marc Van Dro
 * **François Rozet** - [Donshel](https://github.com/Donshel)
 * **Océane Rumfels** - [oceanerumfels](https://github.com/oceanerumfels)
 * **Valentin Vermeylen** - [ValentinVermeylen](https://github.com/ValentinVermeylen)
+
+# Database
+
+For the accuracy assemement, we used the [sudoku-database](https://github.com/Donshel/sudoku-database) database.
