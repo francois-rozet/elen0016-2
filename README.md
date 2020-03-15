@@ -9,7 +9,7 @@ Project realized as part of the course *Computer vision* given by **Marc Van Dro
 ## Authors
 
 * **Maxime Meurisse** - [meurissemax](https://github.com/meurissemax)
-* **François Rozet** - [Donshel](https://github.com/Donshel)
+* **François Rozet** - [francois-rozet](https://github.com/francois-rozet)
 * **Océane Rumfels** - [oceanerumfels](https://github.com/oceanerumfels)
 * **Valentin Vermeylen** - [ValentinVermeylen](https://github.com/ValentinVermeylen)
 
