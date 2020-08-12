@@ -1,0 +1,3 @@
+*.tex linguist-vendored
+*.sty linguist-vendored
+*.ipynb linguist-vendored
